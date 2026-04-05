@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Installed to /usr/local/bin by install-docker-service.sh
+set -euo pipefail
+
+CONFIG="${RULES_LAWYER_CONFIG:-/etc/rules-lawyer-bot/config}"
+ENVF="${RULES_LAWYER_ENV:-/etc/rules-lawyer-bot/bot.env}"
+
+if [[ ! -f "$CONFIG" ]]; then
+  echo "Missing config: $CONFIG" >&2
+  exit 1
+fi
+if [[ ! -f "$ENVF" ]]; then
+  echo "Missing env file with DISCORD_BOT_TOKEN and ANTHROPIC_API_KEY: $ENVF" >&2
+  exit 1
+fi
+
+# shellcheck source=/dev/null
+set -a
+source "$CONFIG"
+set +a
+
+: "${IMAGE_URI:?Set IMAGE_URI in $CONFIG}"
+
+if [[ "${ECR_LOGIN:-0}" == "1" || "${ECR_LOGIN:-}" == "true" ]]; then
+  : "${AWS_REGION:?Set AWS_REGION in $CONFIG when ECR_LOGIN is true}"
+  registry="${IMAGE_URI%%/*}"
+  aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$registry"
+fi
+
+if [[ "${PULL_BEFORE_RUN:-0}" == "1" || "${PULL_BEFORE_RUN:-}" == "true" ]]; then
+  docker pull "$IMAGE_URI"
+fi
+
+exec docker run --rm --name rules-lawyer-bot \
+  --env-file "$ENVF" \
+  "$IMAGE_URI"
