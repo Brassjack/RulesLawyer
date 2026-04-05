@@ -1,0 +1,21 @@
+[Unit]
+Description=Rules Lawyer Discord bot (Python venv, no container)
+Documentation=file:///usr/local/share/doc/rules-lawyer-bot/python-ec2-service.txt
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+
+# Set by install-python-service.sh: User=/Group= or omitted for root.
+# RUN_AS_USER_DIRECTIVES
+
+WorkingDirectory=/opt/rules-lawyer-bot/app
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/rules-lawyer-bot/bot.env
+ExecStart=/opt/rules-lawyer-bot/venv/bin/python -m rules_lawyer.main
+
+[Install]
+WantedBy=multi-user.target
