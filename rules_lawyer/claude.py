@@ -1,11 +1,36 @@
+import logging
 import os
 import re
 
 from anthropic import AsyncAnthropic
 
-MODEL = "claude-sonnet-4-6"
-MAX_TOKENS = 20000
-TEMPERATURE = 1.0
+MODEL = os.environ.get("RULES_LAWYER_MODEL", "claude-sonnet-5-5")
+# Answers are short; this caps the cost of a runaway reply.
+MAX_TOKENS = 4096
+# Rules lookups are short. Raise to "medium" if answers come back thin.
+EFFORT = "low"
+# On a policy decline, the API re-runs the request on a fallback model it picks.
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
+REFUSAL_REPLY = "I can't answer that one."
+
+log = logging.getLogger(__name__)
+
+_client: AsyncAnthropic | None = None
+
+
+def _get_client() -> AsyncAnthropic:
+    """One client for the process, created on first use so importing needs no key.
+
+    timeout/max_retries are kept short so a failed call reports back long before
+    a Discord interaction token (15 min) would expire.
+    """
+    global _client
+    if _client is None:
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise RuntimeError("ANTHROPIC_API_KEY is not set")
+        _client = AsyncAnthropic(timeout=120, max_retries=1)
+    return _client
 
 
 def _extract_answer_text(raw: str) -> str:
@@ -19,28 +44,45 @@ def _extract_answer_text(raw: str) -> str:
 def extract_text_from_message(message) -> str:
     parts: list[str] = []
     for block in message.content:
-        if hasattr(block, "text"):
+        if block.type == "text":
             parts.append(block.text)
     return "".join(parts)
 
 
-async def query_rules_lawyer(user_prompt: str) -> str:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY is not set")
+def _log_usage(response) -> None:
+    usage = response.usage
+    fallback = any(
+        entry.type == "fallback_message" for entry in (usage.iterations or [])
+    )
+    log.info(
+        "model=%s fallback=%s stop=%s in=%s out=%s cache_read=%s cache_write=%s",
+        response.model,
+        fallback,
+        response.stop_reason,
+        usage.input_tokens,
+        usage.output_tokens,
+        usage.cache_read_input_tokens,
+        usage.cache_creation_input_tokens,
+    )
 
-    client = AsyncAnthropic(api_key=api_key)
-    response = await client.messages.create(
+
+async def query_rules_lawyer(user_prompt: str) -> str:
+    response = await _get_client().beta.messages.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
-        temperature=TEMPERATURE,
+        output_config={"effort": EFFORT},
+        betas=[FALLBACK_BETA],
+        fallbacks="default",
         messages=[
             {
                 "role": "user",
                 "content": [{"type": "text", "text": user_prompt}],
             }
         ],
-        thinking={"type": "disabled"},
     )
+    _log_usage(response)
+    if response.stop_reason == "refusal":
+        log.warning("refused: %s", response.stop_details)
+        return REFUSAL_REPLY
     raw = extract_text_from_message(response)
     return _extract_answer_text(raw)

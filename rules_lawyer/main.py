@@ -2,6 +2,7 @@
 Gateway bot: requires Message Content Intent (Discord Developer Portal > Bot > Privileged Gateway Intents).
 """
 
+import logging
 import os
 import re
 import sys
@@ -48,6 +49,12 @@ def main() -> None:
     token = _require_env("DISCORD_BOT_TOKEN")
     _require_env("ANTHROPIC_API_KEY")
 
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+        stream=sys.stdout,
+    )
+
     intents = discord.Intents.default()
     intents.message_content = True
     intents.members = False
@@ -57,7 +64,7 @@ def main() -> None:
     @client.event
     async def on_ready() -> None:
         assert client.user is not None
-        print(f"Logged in as {client.user} ({client.user.id})")
+        logging.info("Logged in as %s (%s)", client.user, client.user.id)
 
     @client.event
     async def on_message(message: discord.Message) -> None:
@@ -79,6 +86,7 @@ def main() -> None:
                 user_prompt = build_user_prompt(query)
                 answer = await query_rules_lawyer(user_prompt)
             except Exception as e:
+                logging.exception("query failed")
                 await message.reply(
                     f"Something went wrong while asking Claude: `{e!s}`",
                     mention_author=False,
@@ -93,7 +101,8 @@ def main() -> None:
             else:
                 await message.channel.send(part)
 
-    client.run(token)
+    # log_handler=None: keep the logging config above instead of discord.py's own.
+    client.run(token, log_handler=None)
 
 
 if __name__ == "__main__":

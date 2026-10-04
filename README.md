@@ -1,10 +1,10 @@
 # Rules Lawyer Bot
 
-A Discord bot that answers **Dungeons & Dragons 5e (2024)** rules questions. When someone **mentions the bot** with a query, it sends the same prompt used by `create_message.py` to **Claude** (Anthropic) and replies in the channel.
+A Discord bot that answers **Dungeons & Dragons 5e (2024)** rules questions. When someone **mentions the bot** with a query, it sends the rules-lawyer prompt to **Claude** (Anthropic) and replies in the channel.
 
 ## Requirements
 
-- Python 3.12+ (for local or EC2 Python install)
+- Python 3.12 (the image pins `python:3.12.15-slim-bookworm`)
 - [Discord application](https://discord.com/developers/applications) with a bot token
 - [Anthropic API key](https://console.anthropic.com/)
 
@@ -18,63 +18,40 @@ In the Developer Portal, under **Bot**, enable **Message Content Intent** (privi
 |----------|---------|
 | `DISCORD_BOT_TOKEN` | Discord bot token |
 | `ANTHROPIC_API_KEY` | Claude API key |
+| `RULES_LAWYER_MODEL` | Optional. Defaults to `claude-sonnet-5-5` |
+
+Each Claude call logs one line: the model that answered (a refusal can fall back to another model), the stop reason, and token use.
 
 ## Run locally
 
+Run only one instance per bot token, or every mention gets two replies.
+
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+uv venv -p 3.12 .venv && uv pip install -p .venv -r requirements.txt
 export DISCORD_BOT_TOKEN="..." ANTHROPIC_API_KEY="..."
 .venv/bin/python -m rules_lawyer.main
 ```
 
-## One-off CLI (`create_message.py`)
+## Deploy: minipc
 
-Uses the shared prompt module; reads `QUERY` from the environment:
-
-```bash
-export ANTHROPIC_API_KEY="..."
-export QUERY="Can you cast two leveled spells in one turn?"
-python create_message.py
-```
-
-## Docker
+The bot runs on Jack's home mini PC as a rootless podman quadlet. The unit,
+secrets layout and operations notes live in `local-config/minipc/apps/ruleslawyer/`.
 
 ```bash
-docker build -t rules-lawyer-bot .
-docker run --rm -e DISCORD_BOT_TOKEN -e ANTHROPIC_API_KEY rules-lawyer-bot
+scripts/deploy-minipc.sh
 ```
 
-## AWS (ECS Fargate)
-
-Terraform provisions a default-VPC **ECR** repository, **ECS Fargate** service (one task), and **CloudWatch** logs. Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars` (gitignored), set tokens and region, then:
-
-```bash
-cd terraform && terraform init && terraform apply
-```
-
-Build and push the image, then roll the service:
-
-```bash
-./scripts/deploy.sh us-east-1 latest
-```
-
-The second argument is the image tag; it should match `image_tag` in Terraform if you do not use `latest`.
-
-## EC2 (systemd, no Terraform required)
-
-- **Container:** `scripts/ec2/install-docker-service.sh` installs `rules-lawyer-bot.service` and runs the image from ECR (or any registry). See `scripts/ec2/config.example` and `bot.env.example`.
-- **Native Python:** `scripts/ec2/install-python-service.sh` installs `rules-lawyer-bot-python.service` with a venv under `/opt/rules-lawyer-bot`. Uses the same `/etc/rules-lawyer-bot/bot.env` format.
-
-After either install, edit secrets, then `sudo systemctl enable --now <unit>`.
+The script ships `git archive HEAD` to the box and builds
+`localhost/rules-lawyer-bot:<short-sha>` there. It only restarts the service if
+the deployed unit already pins that tag. Otherwise it prints the tag. In that
+case, bump `Image=` in local-config, copy the unit to the box and re-run. Commit
+first: the script refuses to run with uncommitted changes.
 
 ## Layout
 
 | Path | Role |
 |------|------|
 | `rules_lawyer/main.py` | Discord client and mention handling |
-| `rules_lawyer/prompt.py` | Rules-lawyer system prompt |
-| `rules_lawyer/claude.py` | Async Anthropic client |
-| `terraform/` | ECS + ECR + logging |
-| `scripts/deploy.sh` | ECR login, build/push, ECS force deployment |
-| `scripts/ec2/` | EC2 systemd installers and examples |
+| `rules_lawyer/prompt.py` | Rules-lawyer prompt |
+| `rules_lawyer/claude.py` | Anthropic client, request and usage logging |
+| `scripts/deploy-minipc.sh` | Build on minipc and restart |
