@@ -76,7 +76,7 @@ def main() -> None:
         query = _strip_bot_mentions(message.content, message)
         if not query:
             await message.reply(
-                "Mention me with your D&D 5e (2024) rules question in the same message.",
+                "You pinged me with nothing? Put the actual rules question in the same message, genius.",
                 mention_author=False,
             )
             return
