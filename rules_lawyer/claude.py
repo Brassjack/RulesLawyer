@@ -49,13 +49,14 @@ def extract_text_from_message(message) -> str:
     return "".join(parts)
 
 
-def _log_usage(response) -> None:
+def _log_usage(system_id: str, response) -> None:
     usage = response.usage
     fallback = any(
         entry.type == "fallback_message" for entry in (usage.iterations or [])
     )
     log.info(
-        "model=%s fallback=%s stop=%s in=%s out=%s cache_read=%s cache_write=%s",
+        "system=%s model=%s fallback=%s stop=%s in=%s out=%s cache_read=%s cache_write=%s",
+        system_id,
         response.model,
         fallback,
         response.stop_reason,
@@ -66,13 +67,16 @@ def _log_usage(response) -> None:
     )
 
 
-async def query_rules_lawyer(user_prompt: str) -> str:
+async def query_rules_lawyer(system_id: str, system_prompt: str, user_prompt: str) -> str:
+    # No cache_control: questions are one-offs, so a cache write would cost more
+    # than it saves (spec decision, 2026-10-05).
     response = await _get_client().beta.messages.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
         output_config={"effort": EFFORT},
         betas=[FALLBACK_BETA],
         fallbacks="default",
+        system=system_prompt,
         messages=[
             {
                 "role": "user",
@@ -80,7 +84,7 @@ async def query_rules_lawyer(user_prompt: str) -> str:
             }
         ],
     )
-    _log_usage(response)
+    _log_usage(system_id, response)
     if response.stop_reason == "refusal":
         log.warning("refused: %s", response.stop_details)
         return REFUSAL_REPLY

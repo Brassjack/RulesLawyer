@@ -12,3 +12,6 @@ __pycache__/
 venv/
 .venv/
 .DS_Store
+
+# Rules references extracted from purchased books; never commit
+refs/
