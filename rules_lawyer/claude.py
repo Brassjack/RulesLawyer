@@ -7,8 +7,8 @@ from anthropic import AsyncAnthropic
 MODEL = os.environ.get("RULES_LAWYER_MODEL", "claude-sonnet-5-5")
 # Answers are short; this caps the cost of a runaway reply.
 MAX_TOKENS = 4096
-# Rules lookups are short. Raise to "medium" if answers come back thin.
-EFFORT = "low"
+# "low" gave the 2014 bonus-action spell rule for a 2024 question at deploy.
+EFFORT = "medium"
 # On a policy decline, the API re-runs the request on a fallback model it picks.
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
