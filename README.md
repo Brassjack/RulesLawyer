@@ -63,6 +63,34 @@ printed-page markers, not raw PDF extracts (the PDFs' tables don't extract
 cleanly). On the box they live in `/var/srv/ruleslawyer/refs/`, mounted
 read-only at `/refs`; see local-config for refreshing them.
 
+How they were made (2026-10-05), so they can be rebuilt or extended:
+
+| File | Source | Tokens |
+|---|---|---|
+| `mothership.md` | *Player's Survival Guide* 1e v1.2 (2023; not the 2018 0e "updated" PSG) | 18,693 |
+| `cyberpunk-red.md` | *Cyberpunk RED* core rulebook, v1.21 PDF | 58,678 |
+
+- **Rules only.** Fiction, setting, examples of play, lifepath and
+  trinket/patch tables, GM advice, NPC blocks and adventures are left out. Each
+  file's header says what's excluded, and the prompt tells Claude to say when
+  the reference doesn't cover a question.
+- **Near-verbatim, not summarised.** Tables are kept whole. Where the PDF's
+  text extraction scrambles multi-column tables (Mothership's Wounds, Panic and
+  weapons; Cyberpunk RED's range DVs, Black ICE and NET floors), the tables
+  were checked against rendered page images.
+- **Page markers are printed page numbers.** For the Cyberpunk RED PDF,
+  printed page = PDF page index − 1.
+- **Size limit: about 100k tokens per system**, measured with the free
+  `count_tokens` API. Each question pays for the whole reference (no prompt
+  caching, because questions are one-offs): about $0.04 for Mothership and
+  $0.12 for Cyberpunk RED.
+
+## Design limits
+
+By choice, `/rules` has no per-channel default system, no auto-detection of
+the system, no follow-up conversation or threads, no retrieval (the whole
+reference is sent), and no ephemeral replies.
+
 ## Deploy: minipc
 
 The bot runs on Jack's home mini PC as a rootless podman quadlet. The unit,
